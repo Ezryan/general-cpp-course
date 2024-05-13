@@ -105,12 +105,17 @@ class Deque {
   using reverse_iterator = std::reverse_iterator<iterator>;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
-  Deque() : start_(0), size_(0), outer_(1, reinterpret_cast<T*>(new char[kInterSize * sizeof(T)])) {}
+  Deque() : start_(0), size_(0), outer_(1) {
+    outer_[0] = reinterpret_cast<T*>(new char[kInterSize * sizeof(T)]);
+  }
 
   explicit Deque(size_t size)
       : start_(0),
         size_(size),
-        outer_(size / kInterSize + 1, reinterpret_cast<T*>(new char[kInterSize * sizeof(T)])) {
+        outer_(size / kInterSize + 1) {
+    for (size_t i = 0; i < outer_.size(); ++i) {
+      outer_[i] = reinterpret_cast<T*>(new char[kInterSize * sizeof(T)]);
+    }
     for (size_t i = 0; i < size; ++i) {
       new(outer_[i / kInterSize] + i % kInterSize) T();
     }
@@ -119,7 +124,10 @@ class Deque {
   Deque(size_t size, const T& value)
       : start_(0),
         size_(size),
-        outer_(size / kInterSize + 1, reinterpret_cast<T*>(new char[kInterSize * sizeof(T)])) {
+        outer_(size / kInterSize + 1) {
+    for (size_t i = 0; i < outer_.size(); ++i) {
+      outer_[i] = reinterpret_cast<T*>(new char[kInterSize * sizeof(T)]);
+    }
     for (size_t i = 0; i < size; ++i) {
       new(outer_[i / kInterSize] + i % kInterSize) T(value);
     }
@@ -128,7 +136,10 @@ class Deque {
   Deque(const Deque& other)
       : start_(0),
         size_(other.size_),
-        outer_(other.size_ / kInterSize + 1, reinterpret_cast<T*>(new char[kInterSize * sizeof(T)])) {
+        outer_(other.size_ / kInterSize + 1) {
+    for (size_t i = 0; i < outer_.size(); ++i) {
+      outer_[i] = reinterpret_cast<T*>(new char[kInterSize * sizeof(T)]);
+    }
     for (size_t i = 0; i < size_; ++i) {
       new(outer_[i / kInterSize] + i % kInterSize) T(other[i]);
     }
@@ -153,7 +164,10 @@ class Deque {
     }
     start_ = 0;
     size_ = copy.size_;
-    outer_ = std::vector<T*>(copy.size_ / kInterSize + 1, reinterpret_cast<T*>(new char[kInterSize * sizeof(T)]));
+    outer_.resize(copy.size_ / kInterSize + 1);
+    for (size_t i = 0; i < outer_.size(); ++i) {
+      outer_[i] = reinterpret_cast<T*>(new char[kInterSize * sizeof(T)]);
+    }
     for (size_t i = 0; i < size_; ++i) {
       new(outer_[i / kInterSize] + i % kInterSize) T(copy[i]);
     }
@@ -306,7 +320,7 @@ class Deque {
   }
 
  private:
-  void reallocate() { // todo
+  void reallocate() {
     std::vector<T*> new_out(3 * outer_.size());
     for (size_t i = 0; i < new_out.size(); ++i) {
       if (i < outer_.size() || i >= 2 * outer_.size()) {
