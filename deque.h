@@ -1,12 +1,23 @@
 #include <iostream>
 #include <iterator>
+#include <vector>
 
 template <typename T>
 class Deque {
-  static const size_t kInterSize = 16;
+  static const int64_t kInterSize = 16;
  public:
   template <bool isConstant>
   class DequeIterator {
+   private:
+    using inside_iter = typename std::conditional<isConstant, typename std::vector<T*>::const_iterator, typename std::vector<T*>::iterator>::type;
+
+    int64_t block_;
+    int64_t index_;
+    inside_iter begin_;
+    T* value_;
+
+    void upd_val_ptr() { value_ = begin_[block_] + index_; }
+
    public:
     friend class Deque;
 
@@ -16,47 +27,52 @@ class Deque {
     using difference_type = std::ptrdiff_t;
     using iterator_category = std::random_access_iterator_tag;
 
-    DequeIterator() : block_(0), index_(0), deque_(nullptr) {}
-    DequeIterator(size_t block, size_t index, const Deque<T>* deque) : block_(block), index_(index), deque_(deque) {}
+    DequeIterator() : block_(0), index_(0), begin_(), value_(nullptr) {}
+    DequeIterator(size_t block, size_t index, inside_iter begin) : block_(block), index_(index), begin_(begin), value_(begin[block_] + index_) {}
     DequeIterator(const DequeIterator<false>& other)
-        : block_(other.block_), index_(other.index_), deque_(other.deque_) {}
+        : block_(other.block_), index_(other.index_), begin_(other.begin_), value_(other.value_) {}
+    operator DequeIterator<true>() { return DequeIterator<true>(block_, index_, begin_); }
 
-    operator DequeIterator<true>() { return DequeIterator<true>(block_, index_, deque_); }
-
-    DequeIterator<false> remove_const() const { return DequeIterator<false>(block_, index_, deque_); }
+    DequeIterator<false> remove_const() const { return DequeIterator<false>(block_, index_, begin_); }
 
     DequeIterator& operator+=(ptrdiff_t diff) {
       int64_t pos = block_ * kInterSize + index_;
       pos += diff;
       index_ = pos % kInterSize;
       block_ = pos / kInterSize;
+      upd_val_ptr();
       return *this;
     }
 
     DequeIterator& operator-=(ptrdiff_t diff) {
       *this += -diff;
+      upd_val_ptr();
       return *this;
     }
 
     DequeIterator& operator++() {
       *this += 1;
+      upd_val_ptr();
       return *this;
     }
 
     DequeIterator& operator--() {
       *this -= 1;
+      upd_val_ptr();
       return *this;
     }
 
     DequeIterator operator++(int) {
       DequeIterator copy = *this;
       *this += 1;
+      upd_val_ptr();
       return copy;
     }
 
     DequeIterator operator--(int) {
       DequeIterator copy = *this;
       *this -= 1;
+      upd_val_ptr();
       return copy;
     }
 
@@ -90,14 +106,9 @@ class Deque {
 
     bool operator>=(const DequeIterator& other) const { return *this > other || *this == other; }
 
-    reference operator*() const { return deque_->outer_[block_][index_]; }
+    reference operator*() const { return *value_; }
 
-    pointer operator->() const { return &(deque_->outer_[block_][index_]); }
-
-   private:
-    int64_t block_;
-    int64_t index_;
-    const Deque<T>* deque_;
+    pointer operator->() const { return value_; }
   };
 
   using iterator = DequeIterator<false>;
@@ -120,7 +131,6 @@ class Deque {
       new(outer_[i / kInterSize] + i % kInterSize) T();
     }
   }
-
   Deque(size_t size, const T& value)
       : start_(0),
         size_(size),
@@ -229,15 +239,15 @@ class Deque {
   }
 
   iterator begin() {
-    return iterator(start_ / kInterSize, start_ % kInterSize, this);
+    return iterator(start_ / kInterSize, start_ % kInterSize, outer_.begin());
   }
 
   const_iterator begin() const {
-    return const_iterator(start_ / kInterSize, start_ % kInterSize, this);
+    return const_iterator(start_ / kInterSize, start_ % kInterSize, outer_.begin());
   }
 
   const_iterator cbegin() const {
-    return const_iterator(start_ / kInterSize, start_ % kInterSize, this);
+    return const_iterator(start_ / kInterSize, start_ % kInterSize, outer_.begin());
   }
 
   reverse_iterator rbegin() {
@@ -253,15 +263,15 @@ class Deque {
   }
 
   iterator end() {
-    return iterator((start_ + size_) / kInterSize, (start_ + size_) % kInterSize, this);
+    return iterator((start_ + size_) / kInterSize, (start_ + size_) % kInterSize, outer_.begin());
   }
 
   const_iterator end() const {
-    return const_iterator((start_ + size_) / kInterSize, (start_ + size_) % kInterSize, this);
+    return const_iterator((start_ + size_) / kInterSize, (start_ + size_) % kInterSize, outer_.begin());
   }
 
   const_iterator cend() const {
-    return const_iterator((start_ + size_) / kInterSize, (start_ + size_) % kInterSize, this);
+    return const_iterator((start_ + size_) / kInterSize, (start_ + size_) % kInterSize, outer_.begin());
   }
 
   reverse_iterator rend() {
@@ -275,7 +285,6 @@ class Deque {
   const_reverse_iterator crend() const {
     return std::reverse_iterator(cbegin());
   }
-
   void insert(iterator iter, const T& value) {
     if (iter == begin()) {
       push_front(value);
@@ -307,10 +316,13 @@ class Deque {
       pop_back();
       return;
     }
+
     iter->~T();
+
     for (iterator from = iter + 1, to = iter; from != end(); ++from, ++to) {
-      new(&(*(to))) T(*from);
+      new(&(*to)) T(*from);
     }
+
     (end() - 1)->~T();
     --size_;
   }
