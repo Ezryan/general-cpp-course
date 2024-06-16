@@ -208,6 +208,7 @@ class Deque {
         (outer_[i / kInterSize] + i % kInterSize)->~T();
       }
       size_ = 0;
+      throw;
     }
   }
 
